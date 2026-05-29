@@ -1,7 +1,7 @@
 Installation
 ============
 
-1. Obtain Python 2.7 and virturalenv.
+1. Obtain Python 3.8 and the standard ``venv`` module.
 
   .. note::
     MethGo depends on `SAMtools <http://www.htslib.org/>`_ and
@@ -12,7 +12,7 @@ Installation
 
   ::
 
-  $ virtualenv --no-site-packages --python=python2.7 methgo_env
+  $ python3.8 -m venv methgo_env
   $ source methgo_env/bin/activate
 
 
@@ -21,26 +21,18 @@ Installation
   ::
 
   $ git clone https://github.com/paoyangchen-laboratory/methgo.git
-  $ pip install -r methgo/requirements/base.txt
-  $ pip install -r methgo/requirements/addition.txt
-
-  .. note::
-    If you're using Mac and the OS version is larger than 10.8, run the
-    following line before you install the requirements:
-
-    ::
-
-    $ export CFLAGS=-Qunused-arguments
+  $ python -m pip install --upgrade pip setuptools wheel
+  $ python -m pip install -r methgo/requirements/base.txt
+  $ python -m pip install -r methgo/requirements/addition.txt
 
   pip will install the following packages:
 
   * `NumPy <http://www.numpy.org/>`_
   * `SciPy <http://www.scipy.org/>`_
   * `matplotlib <http://matplotlib.org/>`_
-  * `pandas <http://matplotlib.org/>`_
-  * `PySAM (0.8.0) <http://matplotlib.org/>`_
+  * `pandas <https://pandas.pydata.org/>`_
+  * `PySAM <https://pysam.readthedocs.io/>`_
   * `Biopython <http://biopython.org/>`_
-  * `pyfasta <https://pypi.python.org/pypi/pyfasta/>`_
   * `Cython <http://cython.org/>`_
   * `pybedtools <https://pythonhosted.org/pybedtools/>`_
 

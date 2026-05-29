@@ -1,13 +1,15 @@
-#!/usr/bin/env python
-from __future__ import division
+#!/usr/bin/env python3
 import os
 import re
 import argparse
-from itertools import izip, compress
+from functools import cmp_to_key
 from collections import defaultdict
 import numpy as np
 import pandas as pd
 from Bio import SeqIO
+import matplotlib
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 def get_parser():
@@ -90,7 +92,7 @@ def const_cgmap(ctxstr, cgmapfile, readdepth=4):
     cgmap = {}
     with open(cgmapfile) as infile:
         for chr in ctxstr.keys():
-            cgmap[chr] = ['-' for _ in xrange(len(ctxstr[chr]))]
+            cgmap[chr] = ['-' for _ in range(len(ctxstr[chr]))]
         for line in infile:
             line = line.strip().split()
             chr = line[0]
@@ -109,7 +111,7 @@ def calc_bulk(ctxstr, cgmap):
     inv_ctxs = {'X': 'CG', 'Y': 'CHG', 'Z': 'CHH'}
     bulk = defaultdict(list)
     for chr in set(ctxstr) & set(cgmap):
-        for tag, mlevel in izip(ctxstr[chr], cgmap[chr]):
+        for tag, mlevel in zip(ctxstr[chr], cgmap[chr]):
             tag = tag.upper()
             if tag in inv_ctxs and mlevel != '-':
                 bulk[inv_ctxs[tag]].append(mlevel)
@@ -131,16 +133,16 @@ def calc_mlevel(ctxstr, cgmap, gtftree, pmtsize=1000):
             gend = max(gtftree[chr][(gene_id, strand)])[1]
             mask[gstart:gend] = [0]*(gend - gstart)
             if strand == '+':
-                for (pos, (tag, mlevel)) in enumerate(izip(ctxstr[chr][gstart-pmtsize:gstart], cgmap[chr][gstart-pmtsize:gstart])):
+                for (pos, (tag, mlevel)) in enumerate(zip(ctxstr[chr][gstart-pmtsize:gstart], cgmap[chr][gstart-pmtsize:gstart])):
                     tag = tag.upper()
                     if tag in inv_ctxs and mlevel != '-':
                         feature_mlevels[inv_ctxs[tag]]['pmt'].append(mlevel)
             elif strand == '-':
-                for (pos, (tag, mlevel)) in enumerate(izip(ctxstr[chr][gend:gend+pmtsize], cgmap[chr][gend:gend+pmtsize])):
+                for (pos, (tag, mlevel)) in enumerate(zip(ctxstr[chr][gend:gend+pmtsize], cgmap[chr][gend:gend+pmtsize])):
                     tag = tag.upper()
                     if tag in inv_ctxs and mlevel != '-':
                         feature_mlevels[inv_ctxs[tag]]['pmt'].append(mlevel)
-            for (pos, (tag, mlevel)) in enumerate(izip(ctxstr[chr][gstart:gend], cgmap[chr][gstart:gend])):
+            for (pos, (tag, mlevel)) in enumerate(zip(ctxstr[chr][gstart:gend], cgmap[chr][gstart:gend])):
                 tag = tag.upper()
                 inexon = False
                 if tag in inv_ctxs and mlevel != '-':
@@ -160,7 +162,7 @@ def calc_mlevel(ctxstr, cgmap, gtftree, pmtsize=1000):
                     else:
                         counter[ctx][feature] += 0
                         mtable[ctx][gene_id][feature] = 0.0
-        for (pos, (tag, mlevel)) in enumerate(izip(ctxstr[chr], cgmap[chr])):
+        for (pos, (tag, mlevel)) in enumerate(zip(ctxstr[chr], cgmap[chr])):
             tag = tag.upper()
             if (tag in inv_ctxs) and (mask[pos] == 1) and (mlevel != '-'):
                 ign[inv_ctxs[tag]].append(mlevel)
@@ -169,12 +171,10 @@ def calc_mlevel(ctxstr, cgmap, gtftree, pmtsize=1000):
                 ign[ctx] = np.mean(ign[ctx])
             else:
                 ign[ctx] = 0.0
-    cg_table = pd.DataFrame(mtable['CG']).T
-    cg_table = cg_table[['pmt', 'gene', 'exon', 'intron']]
-    chg_table = pd.DataFrame(mtable['CHG']).T
-    chg_table = chg_table[['pmt', 'gene', 'exon', 'intron']]
-    chh_table = pd.DataFrame(mtable['CHH']).T
-    chh_table = chh_table[['pmt', 'gene', 'exon', 'intron']]
+    columns = ['pmt', 'gene', 'exon', 'intron']
+    cg_table = pd.DataFrame(mtable['CG']).T.reindex(columns=columns, fill_value=0.0)
+    chg_table = pd.DataFrame(mtable['CHG']).T.reindex(columns=columns, fill_value=0.0)
+    chh_table = pd.DataFrame(mtable['CHH']).T.reindex(columns=columns, fill_value=0.0)
     return ign, cg_table, chg_table, chh_table
 
 def plot_bar(dataframe, bulk, ctx):
@@ -193,7 +193,7 @@ def plot_bar(dataframe, bulk, ctx):
     ax.spines['left'].set_linewidth(2)
     #ax.spines['bottom'].set_position(('outward', 5))
     #ax.spines['left'].set_position(('outward', 5))
-    ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top='off', right='off')
+    ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top=False, right=False)
     for label in ax.xaxis.get_ticklabels():
         label.set_fontweight('bold')
     for label in ax.yaxis.get_ticklabels():
@@ -205,19 +205,19 @@ def plot_bar(dataframe, bulk, ctx):
 
 def plot_feature_mlevel(bulk, ign, cg_table, chg_table, chh_table):
     cg = cg_table.mean()
-    cg = cg.set_value('genome', np.mean(bulk['CG']))
-    cg = cg.set_value('IGN', ign['CG'])
+    cg.loc['genome'] = np.mean(bulk['CG'])
+    cg.loc['IGN'] = ign['CG']
     cg = cg[['genome', 'pmt', 'gene', 'exon', 'intron', 'IGN']]
     cg.to_csv("CG.txt", sep="\t")
     cg_ax = plot_bar(cg, bulk, 'CG')
     chg = chg_table.mean()
-    chg = chg.set_value('genome', np.mean(bulk['CHG']))
-    chg = chg.set_value('IGN', ign['CHG'])
+    chg.loc['genome'] = np.mean(bulk['CHG'])
+    chg.loc['IGN'] = ign['CHG']
     chg = chg[['genome', 'pmt', 'gene', 'exon', 'intron', 'IGN']]
     chg_ax = plot_bar(chg, bulk, 'CHG')
     chh = chh_table.mean()
-    chh = chh.set_value('genome', np.mean(bulk['CHH']))
-    chh = chh.set_value('IGN', ign['CHH'])
+    chh.loc['genome'] = np.mean(bulk['CHH'])
+    chh.loc['IGN'] = ign['CHH']
     chh = chh[['genome', 'pmt', 'gene', 'exon', 'intron', 'IGN']]
     chh_ax = plot_bar(chh, bulk, 'CHH')
     return cg_ax, chg_ax, chh_ax
@@ -239,7 +239,7 @@ def plot_bulkmean(bulk):
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_linewidth(2)
     ax.spines['left'].set_linewidth(2)
-    ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top='off', right='off')
+    ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top=False, right=False)
     for label in ax.xaxis.get_ticklabels():
         label.set_fontweight('bold')
     for label in ax.yaxis.get_ticklabels():
@@ -265,8 +265,8 @@ def plot_bulkhist(bulk):
             axes[ctx].spines['left'].set_linewidth(2)
             axes[ctx].spines['left'].set_position(('outward', 10))
             plt.setp(axes[ctx].get_xticklabels(), visible=False)
-            axes[ctx].tick_params(axis='y', direction='out', right='off', length=6, width=2, labelsize='xx-large')
-            axes[ctx].tick_params(axis='x', top='off', bottom='off')
+            axes[ctx].tick_params(axis='y', direction='out', right=False, length=6, width=2, labelsize='xx-large')
+            axes[ctx].tick_params(axis='x', top=False, bottom=False)
             for label in axes[ctx].yaxis.get_ticklabels():
                 label.set_fontweight('bold')
             axes[ctx].set_ylabel('Fraction', fontsize='xx-large', fontweight='bold')
@@ -281,7 +281,7 @@ def plot_bulkhist(bulk):
             axes[ctx].spines['left'].set_linewidth(2)
             plt.setp(axes[ctx].get_xticklabels(), visible=False)
             plt.setp(axes[ctx].get_yticklabels(), visible=False)
-            axes[ctx].tick_params(top='off', bottom='off', left='off', right='off')
+            axes[ctx].tick_params(top=False, bottom=False, left=False, right=False)
         axes[ctx].set_ylim(0, 1)
         axes[ctx].set_yticks(np.arange(0, 1.2, 0.2))
         axes[ctx].set_xlim(-0.025, 1.025)
@@ -290,9 +290,13 @@ def plot_bulkhist(bulk):
     return fig
 
 # The alphanum algorithm is from http://www.davekoelle.com/alphanum.html
-re_chunk = re.compile("([\D]+|[\d]+)")
-re_letters = re.compile("\D+")
-re_numbers = re.compile("\d+")
+re_chunk = re.compile(r"(\D+|\d+)")
+re_letters = re.compile(r"\D+")
+re_numbers = re.compile(r"\d+")
+
+
+def compare(left, right):
+    return (left > right) - (left < right)
 
 def getchunk(item):
     itemchunk = re_chunk.match(item)
@@ -315,14 +319,14 @@ def alphanum(a, b):
 
         # Both items contain only letters
         if (re_letters.match(ac) and re_letters.match(bc)):
-            n = cmp(ac, bc)
+            n = compare(ac, bc)
         else:
             # Both items contain only numbers
             if (re_numbers.match(ac) and re_numbers.match(bc)):
-                n = cmp(int(ac), int(bc))
+                n = compare(int(ac), int(bc))
             # One item has letters and one item has numbers, or one item is empty
             else:
-                n = cmp(ac, bc)
+                n = compare(ac, bc)
 
                 # Prevent deadlocks
                 if (n == 0):
@@ -335,8 +339,7 @@ def calc_genomewide(ctxstr, cgmap, winsize=200000):
     win_mlevel = defaultdict(list)
     win_x = []
     pos = 0
-    chrs = ctxstr.keys()
-    chrs.sort(cmp=alphanum)
+    chrs = sorted(ctxstr.keys(), key=cmp_to_key(alphanum))
     """
     if 'chr' in ctxstr.keys()[0].lower():
         chrs = sorted(ctxstr.keys(), key=lambda s: s[3:])
@@ -348,7 +351,7 @@ def calc_genomewide(ctxstr, cgmap, winsize=200000):
         while (start + winsize) <= len(ctxstr[chr]):
             win_x.append(pos+(winsize/2))
             tmp = defaultdict(list)
-            for tag, mlevel in izip(ctxstr[chr][start:start+winsize], cgmap[chr][start:start+winsize]):
+            for tag, mlevel in zip(ctxstr[chr][start:start+winsize], cgmap[chr][start:start+winsize]):
                 tag = tag.upper()
                 if tag in inv_ctxs and mlevel != '-':
                     tmp[inv_ctxs[tag]].append(mlevel)
@@ -362,8 +365,7 @@ def plot_genomewide(ctxstr, gpos, gmlevel):
     colors = { 'CG': ( 38/255, 173/255,  84/255),
               'CHG': ( 44/255, 180/255, 234/255),
               'CHH': (249/255,  42/255,  54/255)}
-    chrs = ctxstr.keys()
-    chrs.sort(cmp=alphanum)
+    chrs = sorted(ctxstr.keys(), key=cmp_to_key(alphanum))
     """
     if 'chr' in ctxstr.keys()[0].lower():
         chrs = sorted(ctxstr.keys(), key=lambda s: s[3:])
@@ -393,8 +395,8 @@ def plot_genomewide(ctxstr, gpos, gmlevel):
         label.set_fontweight('bold')
     for label in ax.yaxis.get_ticklabels():
         label.set_fontweight('bold')
-    ax.tick_params(direction='out', length=6, width=2, labelsize='large', top='off', right='off', bottom='off')
-    ax.set_xticks([(vlines[i] + vlines[i+1])/2 for i in xrange(len(vlines) - 1)])
+    ax.tick_params(direction='out', length=6, width=2, labelsize='large', top=False, right=False, bottom=False)
+    ax.set_xticks([(vlines[i] + vlines[i+1])/2 for i in range(len(vlines) - 1)])
     ax.set_xticklabels(chrs)
     ax.set_xlabel('Chromosome', fontsize='xx-large', fontweight='bold')
     ax.set_ylabel('Methylation Level (%)', fontsize='xx-large', fontweight='bold')

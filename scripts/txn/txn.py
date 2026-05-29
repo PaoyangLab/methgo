@@ -1,8 +1,9 @@
-#!/usr/bin/env python
-from __future__ import division
-import pybedtools
+#!/usr/bin/env python3
 import argparse
 import os
+import matplotlib
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -31,8 +32,8 @@ def splitCGmap(strCGmap,nMinCov):
         fLevel = float(lcols[5])*100
         if int(lcols[7]) < nMinCov:
             continue
-        if dCntxtToFout.has_key(strCntxt) == False:
-            strOutFile = strCGmap.rstrip('CGmap')+strCntxt+'.bed'
+        if strCntxt not in dCntxtToFout:
+            strOutFile = os.path.splitext(strCGmap)[0]+'.'+strCntxt+'.bed'
             lOutFiles.append(strOutFile)
             dCntxtToFout[strCntxt] = open(strOutFile,'w')
             dCntxtToCount[strCntxt] = 0
@@ -66,6 +67,8 @@ def getTFXY(strCntxt,strTF,dCntxtToMeth,dCntxtToCount):
     return lX,lY,lXAvg,lYAvg
 
 def getCGVals(strCntxt,strCGBed,strAnnotBedPath,dCntxtToMeth,dCntxtToCount,lTFs):
+    import pybedtools
+
     obsbed = pybedtools.BedTool(strCGBed)
 
     for strFile in os.listdir(strAnnotBedPath):
@@ -76,10 +79,13 @@ def getCGVals(strCntxt,strCGBed,strAnnotBedPath,dCntxtToMeth,dCntxtToCount,lTFs)
             lf_tfmethsum.append(0.0)
         if strFile.endswith('.bed') == False:
             continue
-        head,tail = os.path.split(strFile)
-        if (tail.split('.')[-2] in lTFs) == False:
+        tail = os.path.basename(strFile)
+        parts = tail.split('.')
+        if len(parts) < 2:
             continue
-        strTF = strFile.split('.')[-2]
+        if parts[-2] not in lTFs:
+            continue
+        strTF = parts[-2]
         tfbed = pybedtools.BedTool(os.path.join(strAnnotBedPath,strFile))
         tf_intersect = obsbed.intersect(tfbed,wa=True,wb=True)
         for strLine in tf_intersect:
@@ -109,7 +115,7 @@ def getCntxtToCountMeth(strBedFile,strPathToTXN,lTXN):
     dCntxtGlobal = {}
     strDir, strFile = os.path.split(strBedFile)
     strCntxt = strFile.split('.')[-2]
-    if dCntxtToCount.has_key(strCntxt) == False:
+    if strCntxt not in dCntxtToCount:
         dCntxtToCount[strCntxt] = {}
         dCntxtToMeth[strCntxt] = {}
     dCntxtGlobal[strCntxt] = getGlobalMeth(strBedFile)
@@ -155,7 +161,7 @@ def procMethBed(strMethBed,ltxns,strPathToTXN):
         ax.annotate("",xy=(0.5, -1.06), xycoords='axes fraction',xytext=(.70, -1.06), textcoords='axes fraction',arrowprops=dict(arrowstyle="->",connectionstyle="arc3"),)
         ax.xaxis.set_ticks([1500])
         ax.xaxis.set_ticklabels([''])
-        ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top='off', right='off')
+        ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top=False, right=False)
         ax.set_title(strCntxt, fontsize='xx-large', weight='bold')
         plt.xlabel('Binding Site', fontsize='xx-large', weight='bold')
         plt.ylabel('Methylation Level (%)', fontsize='xx-large', weight='bold')
@@ -164,7 +170,7 @@ def procMethBed(strMethBed,ltxns,strPathToTXN):
         ax.spines['bottom'].set_linewidth(2)
         ax.spines['left'].set_linewidth(2)
         ax.spines['left'].set_position(('outward', 10))
-        ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top='off', right='off')
+        ax.tick_params(direction='out', length=6, width=2, labelsize='xx-large', top=False, right=False)
         for label in ax.xaxis.get_ticklabels():
             label.set_fontweight('bold')
         for label in ax.yaxis.get_ticklabels():
@@ -172,7 +178,8 @@ def procMethBed(strMethBed,ltxns,strPathToTXN):
         ax.set_xlim(0,3000)
         ax.set_ylim(bottom=0)
         plt.tight_layout()
-        fig.savefig(strMethBed.rstrip('bed')+'txn.png', dpi=300)
+        fig.savefig(os.path.splitext(strMethBed)[0]+'.txn.png', dpi=300)
+        plt.close(fig)
 
 def main():
     parser = get_parser()

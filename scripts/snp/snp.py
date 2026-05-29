@@ -1,13 +1,9 @@
-#!/usr/bin/env python
-from __future__ import division
+#!/usr/bin/env python3
 import os
-import re
-import string
 import argparse
 from collections import defaultdict
 import pysam
-import pandas as pd
-from pyfasta import Fasta
+from Bio import SeqIO
 
 def alleleCount(baseList,refNuc):
     pos = defaultdict(int)
@@ -61,34 +57,35 @@ def snpDetermine(aCount, tCount, cCount, gCount, total, refNuc, majorAlleleFreq,
     else:
         snpType = None
     return (freqList,freqDict,primaryAllele,secondaryAllele,snpType)
-	
-def snpOutput(bamfile, genomeFile, coverage=5,majorAlleleFreq=0.9,buffer=0.1):  
-    bam = pysam.Samfile(bamfile, 'rb')
+
+def snpOutput(bamfile, genomeFile, coverage=5,majorAlleleFreq=0.9,buffer=0.1):
     root = os.path.splitext(os.path.basename(bamfile))[0]
-    homFile = open('{}.homozygous.txt'.format(root), 'w')
-    hetFile = open('{}.heterozygous.txt'.format(root), 'w')
-    openFile = Fasta(genomeFile)
-    for col in bam.pileup():
-        chr = bam.getrname(col.tid)
-        pos = col.pos
-        cov = col.n
-        refNuc = openFile[chr][pos]
-        baseList = []
-        for pileupRead in col.pileups:
-            if not pileupRead.is_del:
+    genome = SeqIO.to_dict(SeqIO.parse(genomeFile, 'fasta'))
+    with pysam.AlignmentFile(bamfile, 'rb') as bam, \
+            open('{}.homozygous.txt'.format(root), 'w') as homFile, \
+            open('{}.heterozygous.txt'.format(root), 'w') as hetFile:
+        for col in bam.pileup():
+            chr = bam.get_reference_name(col.reference_id)
+            pos = col.reference_pos
+            refNuc = str(genome[chr].seq[pos]).upper()
+            baseList = []
+            for pileupRead in col.pileups:
+                if pileupRead.is_del or pileupRead.is_refskip:
+                    continue
+                query_pos = pileupRead.query_position
+                if query_pos is None:
+                    continue
                 isReverse = pileupRead.alignment.is_reverse
-                base = pileupRead.alignment.seq[pileupRead.qpos]
-                baseList += [(base, isReverse)]
-        (aCount,tCount,cCount,gCount,total,posCov,negCov) = alleleCount(baseList,refNuc)
-        if total >= coverage:
-            (freqList,freqDict,allele1,allele2,snpType) = snpDetermine(aCount,tCount,cCount,gCount,total,refNuc,majorAlleleFreq,buffer)
-            eachLine = (('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n')%(chr,refNuc,pos,allele1,allele2,snpType,total,posCov,negCov,('\t'.join(map(str,(freqDict[base] for base in ['A','T','C','G']))))))
-            if snpType == 'het':
-			    hetFile.write(eachLine)
-            elif snpType == 'homo':
-				homFile.write(eachLine)	
-    homFile.close()
-    hetFile.close()
+                base = pileupRead.alignment.query_sequence[query_pos].upper()
+                baseList.append((base, isReverse))
+            (aCount,tCount,cCount,gCount,total,posCov,negCov) = alleleCount(baseList,refNuc)
+            if total >= coverage:
+                (freqList,freqDict,allele1,allele2,snpType) = snpDetermine(aCount,tCount,cCount,gCount,total,refNuc,majorAlleleFreq,buffer)
+                eachLine = (('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n')%(chr,refNuc,pos,allele1,allele2,snpType,total,posCov,negCov,('\t'.join(map(str,(freqDict[base] for base in ['A','T','C','G']))))))
+                if snpType == 'het':
+                    hetFile.write(eachLine)
+                elif snpType == 'homo':
+                    homFile.write(eachLine)
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -96,7 +93,7 @@ def get_parser():
     parser.add_argument('-c', '--coverage', type=int, default=5, help='coverage or minimum number of reads desired')
     parser.add_argument('-m', '--majorAlleleFreq',type=float, default=0.9, help='frequency to be considered homozygous allele')
     parser.add_argument('-b', '--buffer',type=float,default=0.1, help='buffer on either side of 0.5 to be considered heterozygous allele')
-    parser.add_argument('-g', '--genomeFile', help='input FASTA file')
+    parser.add_argument('-g', '--genomeFile', required=True, help='input FASTA file')
     return parser
 
 def main():

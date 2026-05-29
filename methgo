@@ -1,13 +1,40 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+import importlib.util
 import os
 import sys
-import imp
 
 
-tool = sys.argv[1]
-methgo_dir = os.path.dirname(os.path.abspath(__file__))
-module_dir = 'scripts/{0}/{0}.py'.format(tool)
-filename = os.path.join(methgo_dir, module_dir)
-module = imp.load_source(tool, filename)
-del sys.argv[0]
-module.main()
+MIN_PYTHON = (3, 8)
+
+
+def load_module(tool):
+    methgo_dir = os.path.dirname(os.path.abspath(__file__))
+    module_dir = 'scripts/{0}/{0}.py'.format(tool)
+    filename = os.path.join(methgo_dir, module_dir)
+    if not os.path.exists(filename):
+        raise SystemExit('Unknown MethGo module: {}'.format(tool))
+
+    spec = importlib.util.spec_from_file_location(tool, filename)
+    if spec is None or spec.loader is None:
+        raise SystemExit('Could not load MethGo module: {}'.format(tool))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def main():
+    if sys.version_info < MIN_PYTHON:
+        raise SystemExit(
+            'MethGo requires Python {}.{} or newer'.format(*MIN_PYTHON)
+        )
+    if len(sys.argv) < 2:
+        raise SystemExit('Usage: methgo <cov|met|txn|snp|cnv> [options]')
+
+    tool = sys.argv[1]
+    module = load_module(tool)
+    sys.argv = [tool] + sys.argv[2:]
+    module.main()
+
+
+if __name__ == '__main__':
+    main()

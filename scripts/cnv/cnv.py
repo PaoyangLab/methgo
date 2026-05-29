@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-from __future__ import division
+#!/usr/bin/env python3
 import os
 import math
 import copy
@@ -9,6 +8,9 @@ import pysam
 import numpy as np
 import scipy.stats
 import pandas as pd
+import matplotlib
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 def extract_chrnum(chr):
@@ -41,14 +43,13 @@ def main():
     for chr in chrlen:
         gcov[chr] = [float('nan')]*chrlen[chr]
 
-    bam = pysam.Samfile(args.bamfile, 'rb')
-    chr = None
-    for col in bam.pileup():
-        pos = col.pos
-        cov = col.n
-        chr = bam.getrname(col.tid)
-        if chr in gcov:
-            gcov[chr][pos] = cov
+    with pysam.AlignmentFile(args.bamfile, 'rb') as bam:
+        for col in bam.pileup():
+            pos = col.reference_pos
+            cov = col.nsegments
+            chr = bam.get_reference_name(col.reference_id)
+            if chr in gcov:
+                gcov[chr][pos] = cov
 
     pos = 0
     chrs = sorted(chrlen.keys(), key=extract_chrnum)
@@ -69,7 +70,7 @@ def main():
 
     shuffle_cov = []
     sample_size = 100
-    for _ in xrange(sample_size):
+    for _ in range(sample_size):
         temp = copy.copy(win_cov)
         random.shuffle(temp)
         shuffle_cov.append(temp)
@@ -85,23 +86,27 @@ def main():
     data = data[data['pval'] < args.pvalue]
     index = data.index.tolist()
     cnv_cand = []
-    temp = []
-    prev = index[0]
-    for next in index[1:]:
-        if prev[0] == next[0]:
-            if (next[1] - prev[1]) == args.winsize:
-                if len(temp) > 0:
-                    if temp[-1] != prev:
+    if index:
+        temp = []
+        prev = index[0]
+        for next_region in index[1:]:
+            if prev[0] == next_region[0]:
+                if (next_region[1] - prev[1]) == args.winsize:
+                    if len(temp) > 0:
+                        if temp[-1] != prev:
+                            temp.append(prev)
+                    else:
                         temp.append(prev)
+                    temp.append(next_region)
                 else:
-                    temp.append(prev)
-                temp.append(next)
-            else:
-                if len(temp) >= args.succession:
-                    cnv_cand.extend(temp)
-                temp = []
-        prev = next
-    data = data.ix[pd.MultiIndex.from_tuples(cnv_cand, names=['chr', 'start', 'end'])]
+                    if len(temp) >= args.succession:
+                        cnv_cand.extend(temp)
+                    temp = []
+            prev = next_region
+        if len(temp) >= args.succession:
+            cnv_cand.extend(temp)
+    cnv_index = pd.MultiIndex.from_tuples(cnv_cand, names=['chr', 'start', 'end'])
+    data = data.loc[cnv_index] if len(cnv_index) else data.iloc[0:0]
     root = os.path.splitext(os.path.basename(args.bamfile))[0]
     data.to_csv('{}.cnv.txt'.format(root), sep='\t')
 
@@ -124,8 +129,8 @@ def main():
         label.set_fontweight('bold')
     for label in ax.yaxis.get_ticklabels():
         label.set_fontweight('bold')
-    ax.tick_params(direction='out', length=6, width=2, labelsize='large', top='off', right='off', bottom='off')
-    ax.set_xticks([(vlines[i] + vlines[i+1])/2 for i in xrange(len(vlines) - 1)])
+    ax.tick_params(direction='out', length=6, width=2, labelsize='large', top=False, right=False, bottom=False)
+    ax.set_xticks([(vlines[i] + vlines[i+1])/2 for i in range(len(vlines) - 1)])
     ax.set_xticklabels([extract_chrnum(chr) for chr in chrs], fontsize='large', fontweight='bold')
     #ax.set_xlabel('Chromosome', fontsize='xx-large', fontweight='bold')
     ax.set_ylabel('Coverage (base)', fontsize='large', fontweight='bold')

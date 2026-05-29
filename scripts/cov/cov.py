@@ -1,11 +1,13 @@
-#!/usr/bin/env python
-from __future__ import division
+#!/usr/bin/env python3
 import re
 import os
 import argparse
 import numpy as np
 import pandas as pd
 from Bio import SeqIO
+import matplotlib
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 def get_parser():
@@ -76,7 +78,7 @@ def plot_ctxcov(num_cg, num_chg, num_chh, cov_cg, cov_chg, cov_chh):
     ax.plot(np.arange(0.5, maxval, 1), n/num_chh*100, linewidth=2, color=colors['CHH'], label='CHH')
     ax.set_xlim(0, maxval)
     ax.set_ylim(0, 100)
-    ax.tick_params(direction='out', top='off', right='off', length=5, width=2, labelsize='large')
+    ax.tick_params(direction='out', top=False, right=False, length=5, width=2, labelsize='large')
     ax.set_xlabel('Coverage (x)', size='large', weight='bold')
     ax.set_ylabel('Percentage (%)', size='large', weight='bold')
     ax.legend(loc='upper right', prop={'size': 'small'})
